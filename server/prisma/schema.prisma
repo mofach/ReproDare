@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  teacher
+  student
+}
+
+enum CardType {
+  truth
+  dare
+}
+
+enum SessionStatus {
+  waiting
+  running
+  finished
+}
+
+model User {
+  id                  BigInt               @id @default(autoincrement())
+  name                String
+  email               String               @unique
+  password_hash       String
+  role                UserRole             @default(student)
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+  categories          Category[]           @relation("creator_categories")
+  cards               Card[]               @relation("creator_cards")
+  sessions            Session[]            @relation("teacher_sessions")
+  sessionParticipants SessionParticipant[]
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
+}
+
+model Category {
+  id          BigInt    @id @default(autoincrement())
+  name        String
+  description String?
+  created_by  BigInt?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  creator     User?     @relation(fields: [created_by], references: [id], name: "creator_categories")
+  cards       Card[]
+  sessions    Session[]
+}
+
+model Card {
+  id           BigInt        @id @default(autoincrement())
+  categoryId   BigInt
+  type         CardType
+  content      String
+  created_by   BigInt?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  category     Category      @relation(fields: [categoryId], references: [id])
+  creator      User?         @relation(fields: [created_by], references: [id], name: "creator_cards")
+  sessionTurns SessionTurn[]
+}
+
+model Session {
+  id           BigInt               @id @default(autoincrement())
+  teacherId    BigInt
+  categoryId   BigInt
+  status       SessionStatus        @default(waiting)
+  title        String?
+  createdAt    DateTime             @default(now())
+  startedAt    DateTime?
+  endedAt      DateTime?
+  teacher      User                 @relation(fields: [teacherId], references: [id], name: "teacher_sessions")
+  category     Category             @relation(fields: [categoryId], references: [id])
+  participants SessionParticipant[]
+  turns        SessionTurn[]
+}
+
+model SessionParticipant {
+  id         BigInt        @id @default(autoincrement())
+  sessionId  BigInt
+  userId     BigInt
+  joined_at  DateTime      @default(now())
+  is_present Boolean       @default(true)
+  session    Session       @relation(fields: [sessionId], references: [id])
+  user       User          @relation(fields: [userId], references: [id])
+  turns      SessionTurn[]
+
+  @@unique([sessionId, userId])
+}
+
+model SessionTurn {
+  id            BigInt             @id @default(autoincrement())
+  sessionId     BigInt
+  participantId BigInt
+  cardId        BigInt
+  answer_text   String?
+  answered_at   DateTime?
+  score         Int?
+  feedback      String?
+  graded_at     DateTime?
+  created_at    DateTime           @default(now())
+  session       Session            @relation(fields: [sessionId], references: [id])
+  participant   SessionParticipant @relation(fields: [participantId], references: [id])
+  card          Card               @relation(fields: [cardId], references: [id])
+
+  @@unique([sessionId, participantId])
+}
+
+model RefreshToken {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt
+  token_hash String
+  expires_at DateTime
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  actorId   BigInt?
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+}
