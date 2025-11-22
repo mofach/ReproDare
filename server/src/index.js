@@ -2,7 +2,7 @@ import createApp from './app.js';
 import http from 'http';
 import { Server as IOServer } from 'socket.io';
 import dotenv from 'dotenv';
-// import { initSocket } from './socket/index.js'; // we'll create socket later
+import { initSocket } from './socket/index.js'; // we'll create socket later
 
 dotenv.config();
 
