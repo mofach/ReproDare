@@ -2,7 +2,29 @@
 import prisma from '../prisma/index.js';
 import { hashPassword, comparePassword } from '../utils/hash.js';
 import { signAccessToken, createRefreshToken, verifyRefreshToken, revokeRefreshToken } from '../utils/jwt.js';
-import { sanitizeUser } from '../utils/serializer.js';
+
+/**
+ * Lightweight serializer for user objects (no dependency on serializer.js)
+ * Removes sensitive fields and normalizes ID & timestamps.
+ */
+function serializeUser(user) {
+  if (!user) return user;
+  // Convert Prisma BigInt id to string if necessary
+  const id = user.id !== undefined ? String(user.id) : undefined;
+
+  // Normalize created/updated fields if present (could be camelCase or snake_case)
+  const createdAt = user.createdAt ?? user.created_at ?? user.created_at;
+  const updatedAt = user.updatedAt ?? user.updated_at ?? user.updatedAt;
+
+  return {
+    id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: createdAt ? (createdAt instanceof Date ? createdAt.toISOString() : String(createdAt)) : undefined,
+    updatedAt: updatedAt ? (updatedAt instanceof Date ? updatedAt.toISOString() : String(updatedAt)) : undefined,
+  };
+}
 
 /**
  * registerStudent: self-register student
@@ -17,7 +39,7 @@ export async function registerStudent({ name, email, password }) {
     data: { name, email, password_hash, role: 'student' }
   });
 
-  return sanitizeUser(user);
+  return serializeUser(user);
 }
 
 /**
@@ -32,7 +54,7 @@ export async function createTeacher({ name, email, password }) {
   const user = await prisma.user.create({
     data: { name, email, password_hash, role: 'teacher' }
   });
-  return sanitizeUser(user);
+  return serializeUser(user);
 }
 
 /**
@@ -46,10 +68,11 @@ export async function loginUser({ email, password }) {
   const ok = await comparePassword(password, user.password_hash);
   if (!ok) throw new Error('Invalid credentials');
 
-  const accessToken = signAccessToken({ id: user.id.toString(), role: user.role, name: user.name, email: user.email });
+  // signAccessToken expects id as string (we keep that)
+  const accessToken = signAccessToken({ id: String(user.id), role: user.role, name: user.name, email: user.email });
   const refreshToken = await createRefreshToken(user.id);
 
-  return { accessToken, refreshToken, user: sanitizeUser(user) };
+  return { accessToken, refreshToken, user: serializeUser(user) };
 }
 
 /**
@@ -59,11 +82,11 @@ export async function refreshAuth(refreshToken) {
   const verified = await verifyRefreshToken(refreshToken);
   if (!verified) throw new Error('Invalid or expired refresh token');
   const { user } = verified;
-  // rotate
-  await revokeRefreshToken(refreshToken); // remove old
+  // rotate: revoke old -> create new
+  await revokeRefreshToken(refreshToken);
   const newRefresh = await createRefreshToken(user.id);
-  const accessToken = signAccessToken({ id: user.id.toString(), role: user.role, name: user.name, email: user.email });
-  return { accessToken, refreshToken: newRefresh, user: sanitizeUser(user) };
+  const accessToken = signAccessToken({ id: String(user.id), role: user.role, name: user.name, email: user.email });
+  return { accessToken, refreshToken: newRefresh, user: serializeUser(user) };
 }
 
 /**

@@ -1,15 +1,26 @@
 // src/socket/state/userSocketMap.js
-// simple wrapper around Map to keep API stable
+/**
+ * Simple in-memory map userId -> socketId
+ * - key: userId (string)
+ * - value: socketId (string)
+ *
+ * Note: This is ephemeral (memory). For multi-instance scaling, replace
+ * with Redis or another shared store and use socket.io-redis adapter.
+ */
+
 export const userSocketMap = new Map();
 
-export function getSocketIdForUser(userId) {
-  return userSocketMap.get(`${userId}`);
+// Optional helpers (not required by handlers, but convenient if needed)
+export function getSocketIdByUserId(userId) {
+  return userSocketMap.get(String(userId));
 }
 
 export function setSocketIdForUser(userId, socketId) {
-  return userSocketMap.set(`${userId}`, socketId);
+  userSocketMap.set(String(userId), socketId);
 }
 
 export function deleteSocketForUser(userId) {
-  return userSocketMap.delete(`${userId}`);
+  userSocketMap.delete(String(userId));
 }
+
+export default userSocketMap;

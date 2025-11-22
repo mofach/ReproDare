@@ -1,18 +1,29 @@
 // src/socket/handlers/session.handler.js
-import { roomName, toBigInt } from '../utils.js';
+/**
+ * Session handlers:
+ * - roulette_next
+ *
+ * Context expected: { prisma, sessionStateManager, userSocketMap }
+ */
+import { roomName } from '../utils.js';
 import { pickRandomCardForCategory } from '../../services/card.service.js';
+import { socketRouletteNext } from '../../validators/index.js';
+import { validateSocket } from '../validateSocket.js';
 
 export default function sessionHandlers(io, socket, { prisma, sessionStateManager, userSocketMap }) {
-  // roulette_next with concurrency guard
-  socket.on('roulette_next', async ({ sessionId }, cb) => {
+  socket.on('roulette_next', async (payload, cb) => {
     try {
-      // must be authenticated teacher or admin to advance the roulette
+      const v = validateSocket(socket, socketRouletteNext, payload);
+      if (!v.ok) return cb && cb({ ok: false, error: v.error });
+      const { sessionId } = v.data;
+
       if (!socket.data || !socket.data.userId) throw new Error('not authenticated');
       const stCheck = sessionStateManager.get(sessionId);
       if (stCheck && stCheck.teacherId && stCheck.teacherId !== `${socket.data.userId}`) {
         throw new Error('only session teacher can advance roulette');
       }
 
+      // concurrency guard
       const locked = sessionStateManager.acquireLock(sessionId);
       if (!locked) return cb && cb({ ok: false, error: 'server busy, try again' });
 
@@ -23,7 +34,7 @@ export default function sessionHandlers(io, socket, { prisma, sessionStateManage
       }
 
       if (!st.queue || st.queue.length === 0) {
-        await prisma.session.update({ where: { id: toBigInt(sessionId) }, data: { status: 'finished', endedAt: new Date() } });
+        await prisma.session.update({ where: { id: BigInt(sessionId) }, data: { status: 'finished', endedAt: new Date() } });
         io.to(roomName(sessionId)).emit('session_finished', { sessionId });
         sessionStateManager.releaseLock(sessionId);
         return cb && cb({ ok: true, finished: true });
@@ -36,8 +47,9 @@ export default function sessionHandlers(io, socket, { prisma, sessionStateManage
         throw new Error('participant not found');
       }
 
+      // ensure categoryId
       if (!st.categoryId) {
-        const s = await prisma.session.findUnique({ where: { id: toBigInt(sessionId) } });
+        const s = await prisma.session.findUnique({ where: { id: BigInt(sessionId) } });
         st.categoryId = s?.categoryId ? `${s.categoryId}` : null;
       }
 
@@ -50,9 +62,9 @@ export default function sessionHandlers(io, socket, { prisma, sessionStateManage
 
       const turn = await prisma.sessionTurn.create({
         data: {
-          sessionId: toBigInt(sessionId),
-          participantId: toBigInt(participant.participantId),
-          cardId: toBigInt(card.id),
+          sessionId: BigInt(sessionId),
+          participantId: BigInt(participant.participantId),
+          cardId: BigInt(card.id),
         },
       });
 
@@ -63,7 +75,7 @@ export default function sessionHandlers(io, socket, { prisma, sessionStateManage
         cardId: `${card.id}`,
       };
 
-      // broadcast visible card content to room
+      // broadcast visible card to all
       io.to(roomName(sessionId)).emit('turn_started', {
         sessionId,
         turnId: `${turn.id}`,
@@ -71,18 +83,18 @@ export default function sessionHandlers(io, socket, { prisma, sessionStateManage
         card: { id: `${card.id}`, type: card.type, content: card.content },
       });
 
+      // private event for the chosen student
       const chosenSocket = userSocketMap.get(`${participant.userId}`);
       if (chosenSocket) {
         io.to(chosenSocket).emit('your_turn', { sessionId, turnId: `${turn.id}`, card: { id: `${card.id}`, type: card.type, content: card.content } });
       }
 
-      // done
       sessionStateManager.releaseLock(sessionId);
-      cb && cb({ ok: true, turnId: `${turn.id}`, userId: `${participant.userId}` });
+      return cb && cb({ ok: true, turnId: `${turn.id}`, userId: `${participant.userId}` });
     } catch (err) {
       console.error('roulette_next err', err);
-      try { sessionStateManager.releaseLock(sessionId); } catch(e){/*ignore*/}
-      cb && cb({ ok: false, error: err.message });
+      try { sessionStateManager.releaseLock(payload?.sessionId); } catch (e) { /* ignore */ }
+      return cb && cb({ ok: false, error: err.message });
     }
   });
 }
