@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+/* Google Font: Poppins (playful but readable) */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
+
+:root{
+  --color-bg: #EBD7FF;       /* light lavender */
+  --color-primary: #6C4CE8;  /* purple */
+  --color-accent: #FFD9C0;   /* soft peach */
+  --color-plate: #F7F1FF;    /* pale plate */
+  --color-text: #2B2540;     /* deep slate */
+  --radius-lg: 18px;
+}
+
+/* Base */
+html,body,#root { height:100%; }
+body {
+  font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: linear-gradient(180deg, var(--color-bg) 0%, #F9F6FF 100%);
+  color: var(--color-text);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* small visual helpers */
+.hero-card {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35));
+  box-shadow: 0 8px 30px rgba(43,37,64,0.08);
+}
+
+/* CTA */
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+  border-radius: 12px;
+  padding: .6rem 1rem;
+  font-weight: 600;
+}
