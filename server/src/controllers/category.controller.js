@@ -4,13 +4,13 @@ import { ok, created, error } from '../utils/response.js';
 
 export async function createCategory(req, res) {
   try {
-    // createdBy optional: if req.user exists later, pass req.user.id
-    const created = await categoryService.createCategory({
+    // gunakan nama lain supaya tidak bentrok dengan helper `created`
+    const category = await categoryService.createCategory({
       name: req.body.name,
       description: req.body.description,
-      createdBy: req.body.createdBy ?? req.body.created_by ?? null
+      createdBy: req.user.id
     });
-    return created(res, { category: created });
+    return created(res, { category });    // <-- memanggil helper created
   } catch (err) {
     return error(res, 400, err.message);
   }

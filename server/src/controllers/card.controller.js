@@ -8,7 +8,7 @@ export async function createCard(req, res) {
       categoryId: req.body.categoryId,
       type: req.body.type,
       content: req.body.content,
-      createdBy: req.body.createdBy ?? null
+      createdBy: req.user.id
     };
     const card = await cardService.createCard(payload);
     return created(res, { card });

@@ -6,6 +6,8 @@ import authRoutes from './routes/auth.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import cardRoutes from './routes/card.routes.js';
 
+BigInt.prototype.toJSON = function () { return Number(this); };
+
 export default function createApp() {
   const app = express();
 
