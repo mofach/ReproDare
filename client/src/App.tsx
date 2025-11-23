@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-
+import { useAuthStore } from '@/store/useAuthStore';
+import LandingPage from '@/pages/LandingPage';
 // --- Auth Features ---
 import LoginPage from '@/features/auth/LoginPage';
 import RegisterPage from '@/features/auth/RegisterPage';
@@ -25,13 +26,25 @@ import LobbyPage from '@/features/game/LobbyPage';
 import GameArena from '@/features/game/GameArena';
 
 function App() {
+  // Ambil status auth untuk proteksi sederhana di level route
+  const { isAuthenticated, user } = useAuthStore();
+
+  // Helper untuk redirect ke dashboard yang tepat
+  const getDashboardRoute = () => {
+    if (user?.role === 'teacher') return '/teacher-dashboard';
+    if (user?.role === 'admin') return '/admin-dashboard';
+    return '/student-dashboard';
+  };
   return (
     <Routes>
-      {/* --- PUBLIC ROUTES --- */}
-      {/* Redirect root ke login */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      {/* --- PUBLIC ROUTE --- */}
+      
+      {/* Route Root: Jika login -> Dashboard, Jika tidak -> Landing Page */}
+      <Route path="/" element={<LandingPage />} />
+
+      {/* Login/Register: Jika sudah login -> Redirect Dashboard */}
+      <Route path="/login" element={isAuthenticated() ? <Navigate to={getDashboardRoute()} /> : <LoginPage />} />
+      <Route path="/register" element={isAuthenticated() ? <Navigate to={getDashboardRoute()} /> : <RegisterPage />} />
 
       {/* --- TEACHER DASHBOARD ROUTES --- */}
       <Route path="/teacher-dashboard" element={<TeacherDashboard />} />

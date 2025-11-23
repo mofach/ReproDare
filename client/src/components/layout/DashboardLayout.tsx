@@ -55,12 +55,10 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
 
   return (
     <div className="flex h-screen bg-muted/20">
-      {/* Sidebar */}
       <aside className="w-64 bg-card border-r flex flex-col hidden md:flex">
-        <div className="p-6 border-b flex items-center gap-2">
-          <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
-            R
-          </div>
+        <div className="p-6 border-b flex items-center gap-3">
+          {/* LOGO UPDATE */}
+          <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
           <span className="font-bold text-xl tracking-tight text-primary">ReproDare</span>
         </div>
 
