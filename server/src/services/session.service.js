@@ -1,105 +1,203 @@
-// src/services/session.service.js
 import prisma from '../prisma/index.js';
-import { toBigInt } from '../utils/helper.js';
 
-/**
- * Session service
- * - createSession
- * - getSessionById
- * - listSessions
- * - getSessionTurns
- * - getUserTurns
- *
- * NOTE: do not implement socket logic here. Socket will use DB-level functions
- * (e.g., creating SessionTurn) directly when needed. This service keeps REST
- * operations tidy for controllers.
- */
+// Helper: Serialize BigInt
+const serialize = (obj) => JSON.parse(JSON.stringify(obj, (key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+));
 
-export async function createSession({ teacherId, categoryId, title }) {
-  if (!teacherId) throw new Error('teacherId required');
-  if (!categoryId) throw new Error('categoryId required');
-
-  // Pastikan category ada — lebih ramah daripada mengandalkan FK error
-  // categoryId bisa berupa string/number, jadikan BigInt untuk lookup
-  const cat = await prisma.category.findUnique({
-    where: { id: toBigInt(categoryId) },
-    select: { id: true, name: true },
-  });
-  if (!cat) {
-    // berikan pesan yang jelas untuk client
-    throw new Error(`Category with id=${categoryId} not found`);
-  }
-
-  const s = await prisma.session.create({
-    data: {
-      teacherId: toBigInt(teacherId),
-      categoryId: toBigInt(categoryId),
-      title: title ?? null,
-      status: 'waiting',
-    },
-  });
-  return s;
+// 1. Create Session
+export async function createSession(teacherId, data) {
+    const session = await prisma.session.create({
+        data: {
+            title: data.title,
+            teacherId: BigInt(teacherId),
+            categoryId: BigInt(data.categoryId),
+            status: 'waiting'
+        },
+        include: { category: true }
+    });
+    return serialize(session);
 }
 
-export async function getSessionById(id) {
-  if (!id) throw new Error('session id required');
-  const s = await prisma.session.findUnique({
-    where: { id: toBigInt(id) },
-    include: {
-      category: true,
-      teacher: { select: { id: true, name: true, email: true, role: true } },
-    },
-  });
-  return s;
+// 2. Get All Sessions
+export async function getAllSessions() {
+    const sessions = await prisma.session.findMany({
+        include: { 
+            teacher: { select: { name: true } },
+            category: { select: { name: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+    return serialize(sessions);
 }
 
-export async function listSessions({ status } = {}) {
-  const where = {};
-  if (status) where.status = status;
-  return prisma.session.findMany({
-    where,
-    include: {
-      category: true,
-      teacher: { select: { id: true, name: true, email: true } },
-    },
-    orderBy: { id: 'desc' },
-  });
+// 3. Get Detail Session (PERBAIKAN DISINI: Tambah role: true)
+export async function getSessionDetail(sessionId) {
+    const session = await prisma.session.findUnique({
+        where: { id: BigInt(sessionId) },
+        include: {
+            participants: {
+                include: { 
+                    user: { 
+                        select: { 
+                            id: true, 
+                            name: true, 
+                            role: true // <--- WAJIB ADA agar frontend bisa filter student
+                        } 
+                    } 
+                }
+            },
+            teacher: { select: { id: true, name: true } },
+            category: { select: { name: true } } // Tambahkan info kategori juga biar lengkap
+        }
+    });
+    return serialize(session);
 }
 
-export async function getSessionTurns(sessionId) {
-  if (!sessionId) throw new Error('sessionId required');
-  return prisma.sessionTurn.findMany({
-    where: { sessionId: toBigInt(sessionId) },
-    include: {
-      card: true,
-      participant: {
-        include: { user: { select: { id: true, name: true, email: true } } },
-      },
-    },
-    orderBy: { id: 'asc' },
-  });
+// 4. Join Session (Socket)
+export async function joinSession(sessionId, userId) {
+    try {
+        console.log(`[DB] Upserting Participant: Sess=${sessionId}, User=${userId}`);
+        
+        await prisma.sessionParticipant.upsert({
+            where: {
+                sessionId_userId: {
+                    sessionId: BigInt(sessionId),
+                    userId: BigInt(userId)
+                }
+            },
+            update: {
+                is_present: true,
+                joined_at: new Date()
+            },
+            create: {
+                sessionId: BigInt(sessionId),
+                userId: BigInt(userId),
+                is_present: true
+            }
+        });
+
+        return getSessionDetail(sessionId);
+    } catch (error) {
+        console.error("Error joining session:", error);
+        throw error;
+    }
 }
 
-export async function getUserTurns(userId) {
-  if (!userId) throw new Error('userId required');
-  return prisma.sessionTurn.findMany({
-    where: {
-      participant: {
-        userId: toBigInt(userId),
-      },
-    },
-    include: {
-      card: true,
-      session: { include: { category: true, teacher: { select: { id: true, name: true } } } },
-    },
-    orderBy: { id: 'desc' },
-  });
+// 5. Leave Session
+export async function leaveSession(sessionId, userId) {
+    try {
+        await prisma.sessionParticipant.update({
+            where: {
+                sessionId_userId: {
+                    sessionId: BigInt(sessionId),
+                    userId: BigInt(userId)
+                }
+            },
+            data: { is_present: false }
+        });
+        
+        return getSessionDetail(sessionId);
+    } catch (error) {
+        return null;
+    }
 }
 
-export default {
-  createSession,
-  getSessionById,
-  listSessions,
-  getSessionTurns,
-  getUserTurns,
-};
+// 6. Start Game
+export async function startGame(sessionId) {
+    const session = await prisma.session.update({
+        where: { id: BigInt(sessionId) },
+        data: { 
+            status: 'running',
+            startedAt: new Date()
+        }
+    });
+    return serialize(session);
+}
+
+// 7. Record Turn
+export async function recordTurn({ sessionId, participantId, cardId, type, answer, score, feedback }) {
+    const turn = await prisma.sessionTurn.create({
+        data: {
+            sessionId: BigInt(sessionId),
+            participantId: BigInt(participantId),
+            cardId: BigInt(cardId),
+            answer_text: answer,
+            score: parseInt(score),
+            feedback: feedback,
+            answered_at: new Date(),
+            graded_at: new Date()
+        }
+    });
+    return serialize(turn);
+}
+
+// 8. Get Random Card
+export async function getRandomCard(categoryId, type) {
+    const cards = await prisma.card.findMany({
+        where: { 
+            categoryId: BigInt(categoryId),
+            type: type 
+        }
+    });
+
+    if (cards.length === 0) return null;
+    const randomIndex = Math.floor(Math.random() * cards.length);
+    return serialize(cards[randomIndex]);
+}
+
+// 9. End Game
+export async function endGame(sessionId) {
+    await prisma.session.update({
+        where: { id: BigInt(sessionId) },
+        data: { 
+            status: 'finished',
+            endedAt: new Date()
+        }
+    });
+}
+
+// 10. Get History per User
+export async function getUserHistory(userId, role) {
+    const whereClause = {
+        status: 'finished' // Hanya ambil yang sudah selesai
+    };
+
+    if (role === 'teacher') {
+        whereClause.teacherId = BigInt(userId);
+    } else {
+        // Untuk siswa: Cari sesi dimana dia ada di daftar participants
+        whereClause.participants = {
+            some: { userId: BigInt(userId) }
+        };
+    }
+
+    const sessions = await prisma.session.findMany({
+        where: whereClause,
+        include: {
+            teacher: { select: { name: true } },
+            category: { select: { name: true } },
+            // Sertakan nilai siswa tersebut di sesi ini (opsional, untuk detail history)
+            turns: {
+                where: role === 'student' ? {
+                    participant: { userId: BigInt(userId) }
+                } : undefined
+            }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    return serialize(sessions);
+}
+
+// 11. Manual End/Delete Session (HTTP)
+export async function archiveSession(sessionId) {
+    const session = await prisma.session.update({
+        where: { id: BigInt(sessionId) },
+        data: { 
+            status: 'finished',
+            endedAt: new Date()
+        }
+    });
+    return serialize(session);
+}

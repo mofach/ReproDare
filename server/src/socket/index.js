@@ -1,102 +1,60 @@
 // src/socket/index.js
-import { verifyToken } from '../utils/jwt.js';
-import userSocketMap from './state/userSocketMap.js';
-import SessionStateManager from './state/sessionState.js';
+import { verifyToken } from '../utils/jwt.js'; 
+import registerGameHandlers from './handlers/game.handler.js';
 
-// handlers
-import teacherHandlers from './handlers/teacher.handler.js';
-import studentHandlers from './handlers/student.handler.js';
-import sessionHandlers from './handlers/session.handler.js';
+let ioInstance;
 
-import prisma from '../prisma/index.js';
-
-const sessionStateManager = new SessionStateManager();
-
-/**
- * Normalize token value: accept "Bearer <token>" or raw token.
- */
-function normalizeToken(raw) {
-  if (!raw) return null;
-  if (typeof raw !== 'string') return null;
-  raw = raw.trim();
-  if (raw.toLowerCase().startsWith('bearer ')) return raw.slice(7).trim();
-  return raw;
-}
-
-/**
- * initSocket(io)
- */
+// PERBAIKAN: Menerima 'io' yang sudah dibuat di src/index.js
 export function initSocket(io) {
-  // authenticate on initial handshake using socket.io middleware
-  io.use((socket, next) => {
+  ioInstance = io;
+
+  // 1. Middleware: Cek Token
+  io.use(async (socket, next) => {
     try {
-      // prefer auth token (client: io(url, { auth: { token: 'Bearer ...' } }))
-      const authToken = socket.handshake?.auth?.token ?? socket.handshake?.auth?.authorization;
-      // fallback to common header (some clients put it in 'authorization')
-      const headerToken = socket.handshake?.headers?.authorization ?? socket.handshake?.headers?.Authorization;
-
-      const raw = authToken ?? headerToken ?? null;
-      const token = normalizeToken(raw);
-
-      if (!token) {
-        const e = new Error('authentication token required');
-        e.data = { code: 'AUTH_REQUIRED' }; // optional data
-        return next(e);
+      const tokenString = socket.handshake.auth.token;
+      
+      // Jika token tidak ada di handshake, cek header (opsional)
+      if (!tokenString) {
+          console.log("[Socket Auth] No token provided");
+          return next(new Error("Authentication error"));
       }
 
-      const payload = verifyToken(token);
-      if (!payload || !payload.id) {
-        const e = new Error('invalid token');
-        e.data = { code: 'AUTH_INVALID' };
-        return next(e);
+      const token = tokenString.split(' ')[1];
+      const decoded = verifyToken(token);
+      
+      if (!decoded) {
+          console.log("[Socket Auth] Invalid Token");
+          return next(new Error("Invalid token"));
       }
 
-      // attach identity to socket.data
-      socket.data.userId = String(payload.id);
-      socket.data.role = payload.role ?? null;
-      socket.data.email = payload.email ?? null;
-      socket.data.name = payload.name ?? null;
-
-      // register mapping
-      userSocketMap.set(socket.data.userId, socket.id);
-
-      return next();
+      socket.user = decoded; 
+      socket.userId = BigInt(decoded.id); 
+      next();
     } catch (err) {
-      console.error('socket auth error:', err);
-      const e = new Error('authentication failed');
-      e.data = { code: 'AUTH_ERROR' };
-      return next(e);
+      console.error("[Socket Auth] Error:", err);
+      next(new Error("Authentication error"));
     }
   });
 
+  // 2. Event Connection
   io.on('connection', (socket) => {
-    const uid = socket.data?.userId ?? 'unknown';
-    console.log(`socket connected: ${socket.id} (user: ${uid})`);
+    // LOG INI HARUS MUNCUL SEKARANG
+    console.log(`✅ [SOCKET CONNECTED] User: ${socket.user.name} (ID: ${socket.userId}) | SocketID: ${socket.id}`);
 
-    const ctx = {
-      prisma,
-      sessionStateManager,
-      userSocketMap,
-    };
+    // Registrasi Handler Game
+    registerGameHandlers(io, socket);
 
-    // attach handlers
-    try {
-      teacherHandlers(io, socket, ctx);
-      studentHandlers(io, socket, ctx);
-      sessionHandlers(io, socket, ctx);
-    } catch (err) {
-      console.error('error attaching socket handlers', err);
-    }
-
-    // cleanup on disconnect
     socket.on('disconnect', (reason) => {
-      const uid2 = socket.data?.userId;
-      if (uid2 && userSocketMap.get(uid2) === socket.id) {
-        userSocketMap.delete(uid2);
-      }
-      console.log(`socket disconnected: ${socket.id} (user: ${uid2}) reason=${reason}`);
+      console.log(`❌ [SOCKET DISCONNECT] User: ${socket.user.name} | Reason: ${reason}`);
     });
   });
+
+  return io;
 }
 
-export default initSocket;
+export function getIO() {
+  if (!ioInstance) {
+    throw new Error("Socket.io not initialized!");
+  }
+  return ioInstance;
+}

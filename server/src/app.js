@@ -6,15 +6,14 @@ import authRoutes from './routes/auth.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import cardRoutes from './routes/card.routes.js';
 import sessionRoutes from './routes/session.routes.js';
+import userRoutes from './routes/user.routes.js'; // <--- Import Baru
 
-// Keep the BigInt global patch exactly as you used it so nothing breaks.
-// It converts BigInt to Number when JSON.stringify is called.
+// Keep the BigInt global patch
 BigInt.prototype.toJSON = function () { return Number(this); };
 
 export default function createApp() {
   const app = express();
 
-  // Use CORS permissive for dev; if you have env var later we can switch to that.
   app.use(cors({ origin: true, credentials: true }));
   app.use(cookieParser());
   app.use(express.json());
@@ -25,9 +24,8 @@ export default function createApp() {
   app.use('/categories', categoryRoutes);
   app.use('/cards', cardRoutes);
   app.use('/sessions', sessionRoutes);
+  app.use('/users', userRoutes); // <--- Register Route Baru
 
-  // Inline error handler — keep this simple handler (no external file).
-  // This preserves current behavior and won't require adding new files.
   app.use((err, req, res, next) => {
     console.error(err);
     res.status(err?.status || 500).json({ error: err?.message || 'internal error' });
