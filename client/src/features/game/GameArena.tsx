@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
 import { api } from '@/api/axios';
 import { cn } from '@/lib/utils';
-import { Loader2, Zap, MessageCircleQuestion, Trophy, AlertCircle, Star, Send } from 'lucide-react';
+import { Loader2, Zap, MessageCircleQuestion, Trophy, AlertCircle, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion'; 
 
 type GamePhase = 'IDLE' | 'SPINNING' | 'CARD_REVEAL' | 'ANSWERING' | 'GRADING';
