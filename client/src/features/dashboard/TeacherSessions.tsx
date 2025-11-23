@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SimpleModal from '@/components/ui/simple-modal';
 import { api } from '@/api/axios';
-import { Dices, Plus, PlayCircle, Loader2, Calendar, Trash2, Clock, History, Archive } from 'lucide-react';
+import { Dices, Plus, PlayCircle, Loader2, Trash2, Clock, History, Archive } from 'lucide-react';
 import { format, differenceInMinutes } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
