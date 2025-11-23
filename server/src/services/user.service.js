@@ -54,3 +54,19 @@ export async function deleteUserById(id) {
 
   return true;
 }
+
+// NEW: Hitung Total Score Siswa
+export async function getUserTotalScore(userId) {
+  const aggregate = await prisma.sessionTurn.aggregate({
+    _sum: {
+      score: true
+    },
+    where: {
+      participant: {
+        userId: BigInt(userId)
+      }
+    }
+  });
+
+  return aggregate._sum.score || 0;
+}

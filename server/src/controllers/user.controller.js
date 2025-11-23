@@ -24,3 +24,14 @@ export async function deleteUser(req, res) {
     return error(res, 400, err.message);
   }
 }
+
+// NEW: Get My Score
+export async function getMyScore(req, res) {
+  try {
+    const userId = req.user.id;
+    const score = await userService.getUserTotalScore(userId);
+    return ok(res, { score });
+  } catch (err) {
+    return error(res, 500, err.message);
+  }
+}
