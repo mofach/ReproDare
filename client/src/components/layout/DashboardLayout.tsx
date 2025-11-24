@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/static-components */
 import { ReactNode, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -50,7 +49,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
 
   // Komponen Navigasi (Dipakai di Desktop Sidebar & Mobile Overlay)
   const NavContent = () => (
-    <div className="flex flex-col h-full bg-card text-card-foreground">
+    <div className="flex flex-col h-full bg-white text-slate-900">
       <div className="p-6 border-b flex items-center gap-3">
         <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
         <span className="font-bold text-xl tracking-tight text-primary">ReproDare</span>
@@ -98,15 +97,15 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
   return (
     <div className="flex h-screen bg-muted/20 overflow-hidden">
       {/* 1. DESKTOP SIDEBAR (Hidden on Mobile) */}
-      <aside className="w-64 border-r hidden md:flex flex-col h-full">
+      <aside className="w-64 border-r hidden md:flex flex-col h-full bg-white">
         <NavContent />
       </aside>
 
       {/* 2. MOBILE LAYOUT & CONTENT */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         
-        {/* Mobile Header */}
-        <header className="md:hidden h-16 border-b bg-card flex items-center justify-between px-4 flex-shrink-0 z-20">
+        {/* Mobile Header (FIX: bg-white solid & shadow) */}
+        <header className="md:hidden h-16 border-b bg-white flex items-center justify-between px-4 flex-shrink-0 z-50 shadow-sm relative">
            <div className="flex items-center gap-2">
               <img src="/logo.png" alt="Logo" className="h-8 w-auto" />
               <span className="font-bold text-lg text-primary">ReproDare</span>
@@ -118,8 +117,8 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
 
         {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-50 bg-black/50 md:hidden">
-            <div className="absolute right-0 top-0 h-full w-64 shadow-xl animate-in slide-in-from-right duration-200">
+          <div className="fixed inset-0 z-[60] bg-black/50 md:hidden">
+            <div className="absolute right-0 top-0 h-full w-72 shadow-2xl animate-in slide-in-from-right duration-200 bg-white">
                <div className="absolute top-4 right-4 z-10">
                  <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                    <X className="h-6 w-6" />
