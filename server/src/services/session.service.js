@@ -19,9 +19,19 @@ export async function createSession(teacherId, data) {
     return serialize(session);
 }
 
-// 2. Get All Sessions
-export async function getAllSessions() {
+// 2. Get All Sessions (Modified for Isolation)
+export async function getAllSessions(userId, role) {
+    const whereClause = {};
+
+    // ISOLASI: Jika Guru, hanya ambil sesi miliknya
+    if (role === 'teacher') {
+        whereClause.teacherId = BigInt(userId);
+    }
+    // Jika Siswa, ambil semua yang statusnya waiting/running (Logic lama)
+    // (Atau biarkan kosong untuk ambil semua, nanti difilter frontend/controller)
+
     const sessions = await prisma.session.findMany({
+        where: whereClause,
         include: { 
             teacher: { select: { name: true } },
             category: { select: { name: true } }
@@ -31,7 +41,7 @@ export async function getAllSessions() {
     return serialize(sessions);
 }
 
-// 3. Get Detail Session (PERBAIKAN DISINI: Tambah role: true)
+// 3. Get Detail Session
 export async function getSessionDetail(sessionId) {
     const session = await prisma.session.findUnique({
         where: { id: BigInt(sessionId) },
@@ -42,13 +52,21 @@ export async function getSessionDetail(sessionId) {
                         select: { 
                             id: true, 
                             name: true, 
-                            role: true // <--- WAJIB ADA agar frontend bisa filter student
+                            role: true 
                         } 
                     } 
                 }
             },
             teacher: { select: { id: true, name: true } },
-            category: { select: { name: true } } // Tambahkan info kategori juga biar lengkap
+            category: { select: { name: true } },
+            // ADD THIS: Sertakan turns agar frontend tahu siapa yg sudah main
+            turns: {
+                select: {
+                    participant: {
+                        select: { userId: true }
+                    }
+                }
+            }
         }
     });
     return serialize(session);

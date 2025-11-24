@@ -55,18 +55,25 @@ export async function deleteUserById(id) {
   return true;
 }
 
-// NEW: Hitung Total Score Siswa
+// ...
 export async function getUserTotalScore(userId) {
+  // Pastikan userId dikonversi ke BigInt dengan aman
+  const uid = BigInt(userId);
+
+  // Cek dulu apakah user ini pernah main?
+  // Sebenarnya aggregate bisa langsung, tapi kita pastikan where clause benar
+  // participant.userId harus match user.id
   const aggregate = await prisma.sessionTurn.aggregate({
     _sum: {
       score: true
     },
     where: {
       participant: {
-        userId: BigInt(userId)
+        userId: uid
       }
     }
   });
 
+  // FIX: Handle null result
   return aggregate._sum.score || 0;
 }

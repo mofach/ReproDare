@@ -4,7 +4,9 @@ import { ok, created, error } from '../utils/response.js';
 // GET /sessions (List Sesi)
 export async function listSessions(req, res) {
     try {
-        const sessions = await sessionService.getAllSessions();
+        // Ambil ID dan Role dari token user yang request
+        const { id, role } = req.user;
+        const sessions = await sessionService.getAllSessions(id, role);
         return ok(res, { items: sessions });
     } catch (err) {
         return error(res, 500, err.message);

@@ -8,11 +8,11 @@ const router = Router();
 
 // Middleware: Harus Login, dan Role harus 'teacher' atau 'admin'
 router.use(authMiddleware);
+router.get('/me/score', userController.getMyScore);
 router.use(requireRole('teacher', 'admin'));
 
 // GET /users?role=student  -> List user (bisa filter role)
 router.get('/', userController.listUsers);
-router.get('/me/score', userController.getMyScore);
 // DELETE /users/:id -> Hapus user by ID
 router.delete('/:id', userController.deleteUser);
 

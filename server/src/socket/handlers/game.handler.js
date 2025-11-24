@@ -1,79 +1,132 @@
 import * as sessionService from '../../services/session.service.js';
 
+// PENYIMPANAN STATE SEMENTARA DI MEMORI SERVER
+const gameTimers = {};    // { sessionId: TimeoutObject }
+const activePlayers = {}; // { sessionId: userId } <--- TRACKING PLAYER AKTIF
+
 export default function registerGameHandlers(io, socket) {
-  
+
+  // --- HELPERS ---
+
+  const startTimer = (sessionId, durationSec, callback) => {
+    if (gameTimers[sessionId]) clearTimeout(gameTimers[sessionId]);
+
+    const ms = durationSec * 1000;
+    gameTimers[sessionId] = setTimeout(() => {
+        console.log(`[TIMER] Session ${sessionId} expired!`);
+        callback();
+    }, ms);
+  };
+
+  const stopTimer = (sessionId) => {
+    if (gameTimers[sessionId]) {
+        clearTimeout(gameTimers[sessionId]);
+        delete gameTimers[sessionId];
+    }
+  };
+
+  const validateOwner = async (sessionId, userId) => {
+      const session = await sessionService.getSessionDetail(sessionId);
+      return String(session.teacher.id) === String(userId);
+  };
+
+  // --- HANDLERS ---
+
   // 1. JOIN LOBBY
   socket.on('join_lobby', async ({ sessionId }) => {
     try {
-      console.log(`[SOCKET] Join Request: User ${socket.user.name} -> Session ${sessionId}`);
-      
+      if (socket.user.role === 'teacher') {
+          const isOwner = await validateOwner(sessionId, socket.userId);
+          if (!isOwner) return;
+      }
+
       const room = `session_${sessionId}`;
       socket.join(room); 
+      socket.activeSessionId = sessionId; 
 
-      // PENTING: Simpan SessionID di socket ini untuk dipakai saat disconnect nanti
-      socket.activeSessionId = sessionId;
-
-      // Update DB
       const sessionData = await sessionService.joinSession(sessionId, socket.userId);
-
-      // Broadcast update ke room
       io.to(room).emit('lobby_update', sessionData);
     } catch (err) {
-      console.error("[SOCKET ERROR] Join failed:", err);
-      socket.emit('error', { message: "Failed to join lobby" });
+      console.error(err);
     }
   });
 
-  // 2. DISCONNECT (HANDLE USER LEAVE)
+  // 2. DISCONNECT (LOGIC UTAMA DISINI)
   socket.on('disconnect', async () => {
-    // Cek apakah user ini sedang tergabung di sesi?
     if (socket.activeSessionId) {
-      console.log(`[SOCKET] User ${socket.user.name} disconnected from Session ${socket.activeSessionId}`);
-      
-      // Update DB set is_present = false
-      const updatedSession = await sessionService.leaveSession(socket.activeSessionId, socket.userId);
-      
-      // Jika berhasil update, kabari sisa orang di lobby
-      if (updatedSession) {
-        io.to(`session_${socket.activeSessionId}`).emit('lobby_update', updatedSession);
-      }
+        const sessionId = socket.activeSessionId;
+        const userId = socket.userId.toString();
+
+        console.log(`[SOCKET] User ${socket.user.name} disconnected from ${sessionId}`);
+
+        // A. Update DB Status Offline
+        if (socket.user.role === 'student') {
+            const updatedSession = await sessionService.leaveSession(sessionId, socket.userId);
+            if (updatedSession) {
+                io.to(`session_${sessionId}`).emit('lobby_update', updatedSession);
+            }
+
+            // B. CEK APAKAH DIA ACTIVE PLAYER?
+            // Jika siswa yang sedang giliran keluar, jangan tunggu timer habis!
+            if (activePlayers[sessionId] === userId) {
+                console.log(`[GAME] Active player disconnected! Forcing next turn...`);
+                
+                // Matikan timer
+                stopTimer(sessionId);
+                
+                // Hapus status active
+                delete activePlayers[sessionId];
+
+                // Broadcast Turn Selesai (Nilai 0)
+                io.to(`session_${sessionId}`).emit('turn_completed', {
+                    score: 0,
+                    feedback: `Siswa ${socket.user.name} keluar dari permainan (Auto-Skip).`
+                });
+            }
+        }
     }
   });
 
-  // 3. START GAME (Teacher Only)
+  // 3. START GAME
   socket.on('start_game', async ({ sessionId }) => {
-    console.log(`[SOCKET] Start Game Request by ${socket.user.name} (Role: ${socket.user.role})`);
-
-    // Validasi Role
-    if (socket.user.role !== 'teacher') {
-        console.warn("[SOCKET BLOCK] Non-teacher tried to start game");
-        return; 
-    }
+    const isOwner = await validateOwner(sessionId, socket.userId);
+    if (!isOwner) return;
 
     try {
-      await sessionService.startGame(sessionId);
-      const room = `session_${sessionId}`;
-      
-      console.log(`[SOCKET] Game Started! Broadcasting to room ${room}`);
-      io.to(room).emit('game_started');
+      // Validasi minimal 1 siswa online
+      const session = await sessionService.getSessionDetail(sessionId);
+      const onlineStudents = session.participants.filter(p => p.user.role === 'student' && p.is_present);
+
+      if (onlineStudents.length === 0) {
+          socket.emit('error', { message: "Tidak ada siswa online!" });
+          return;
+      }
+
+      const updatedSession = await sessionService.startGame(sessionId);
+      io.to(`session_${sessionId}`).emit('game_started');
+      io.to(`session_${sessionId}`).emit('lobby_update', updatedSession);
     } catch (err) {
-      console.error("[SOCKET ERROR] Start Game failed:", err);
-      socket.emit('error', { message: "Failed to start game" });
+      socket.emit('error', { message: "Failed to start" });
     }
   });
 
   // 4. SPIN ROULETTE
   socket.on('spin_roulette', async ({ sessionId, participants }) => {
-    if (socket.user.role !== 'teacher') return;
-    
-    // Safety check jika participants kosong
-    if (!participants || participants.length === 0) return;
+    const isOwner = await validateOwner(sessionId, socket.userId);
+    if (!isOwner) return;
 
+    stopTimer(sessionId); // Safety clear
+
+    // Random Pick
     const randomIndex = Math.floor(Math.random() * participants.length);
     const selectedParticipant = participants[randomIndex]; 
+    
+    // SIMPAN PLAYER AKTIF DI MEMORI
+    // Agar kalau dia disconnect, kita tahu harus skip
+    activePlayers[sessionId] = selectedParticipant.user.id.toString();
 
     const room = `session_${sessionId}`;
-    io.to(room).emit('roulette_spinning', { duration: 3000 });
+    io.to(room).emit('roulette_spinning');
 
     setTimeout(() => {
       io.to(room).emit('roulette_result', { 
@@ -85,53 +138,74 @@ export default function registerGameHandlers(io, socket) {
 
   // 5. DRAW CARD
   socket.on('draw_card', async ({ sessionId, categoryId, type }) => {
-    try {
-      // Pastikan categoryId dikirim, kalau tidak pakai default 1 (atau throw error)
-      const catId = categoryId || 1; 
-      const card = await sessionService.getRandomCard(catId, type);
-      const room = `session_${sessionId}`;
-      
-      if (!card) {
-        // Fallback dummy card jika DB kosong (biar game ga macet)
-        io.to(room).emit('card_drawn', { card: { id: 0, type, content: "Kartu habis/tidak ditemukan di database!" } });
-        return;
-      }
+    const card = await sessionService.getRandomCard(categoryId || 1, type);
+    const room = `session_${sessionId}`;
+    
+    io.to(room).emit('card_drawn', { card });
 
-      io.to(room).emit('card_drawn', { card });
-    } catch (err) {
-      console.error(err);
-    }
+    // TIMER 1: Menjawab (30 Detik)
+    console.log(`[TIMER] Start 30s answering for ${sessionId}`);
+    startTimer(sessionId, 30, () => {
+        // Waktu Habis Menjawab
+        io.to(room).emit('answer_submitted', { 
+            userId: 'SYSTEM', 
+            answer: '(Waktu Habis - Tidak Menjawab)' 
+        });
+        
+        // Lanjut ke Timer Guru (beri waktu guru menilai walau telat)
+        // Atau auto-skip (tergantung preferensi). Disini kita kasih guru waktu menilai 0.
+    });
   });
 
   // 6. SUBMIT ANSWER
   socket.on('submit_answer', ({ sessionId, answer }) => {
     const room = `session_${sessionId}`;
+    
+    // Pindah Timer -> Guru
+    stopTimer(sessionId);
+
     io.to(room).emit('answer_submitted', { 
         userId: socket.userId.toString(),
         answer 
+    });
+
+    // TIMER 2: Guru Menilai (30 Detik)
+    console.log(`[TIMER] Start 30s grading for ${sessionId}`);
+    startTimer(sessionId, 30, () => {
+        // Guru kelamaan -> Auto 0
+        io.to(room).emit('turn_completed', {
+            score: 0,
+            feedback: 'Waktu Habis (Guru tidak merespon)'
+        });
+        delete activePlayers[sessionId]; // Clear active player
     });
   });
 
   // 7. SUBMIT GRADE
   socket.on('submit_grade', async (data) => {
-    if (socket.user.role !== 'teacher') return;
+    const isOwner = await validateOwner(data.sessionId, socket.userId);
+    if (!isOwner) return;
 
-    try {
-      await sessionService.recordTurn(data);
-      const room = `session_${data.sessionId}`;
-      io.to(room).emit('turn_completed', {
+    stopTimer(data.sessionId); // Stop semua timer
+    delete activePlayers[data.sessionId]; // Clear active player
+
+    await sessionService.recordTurn(data);
+    
+    io.to(`session_${data.sessionId}`).emit('turn_completed', {
         score: data.score,
         feedback: data.feedback
-      });
-    } catch (err) {
-      console.error(err);
-    }
+    });
   });
   
   // 8. END GAME
-  socket.on('end_game', async ({ sessionId }) => {
-      if (socket.user.role !== 'teacher') return;
+   socket.on('end_game', async ({ sessionId }) => {
+      const isOwner = await validateOwner(sessionId, socket.userId);
+      if (!isOwner) return;
+
+      stopTimer(sessionId);
+      delete activePlayers[sessionId];
+      
       await sessionService.endGame(sessionId);
       io.to(`session_${sessionId}`).emit('game_ended');
-  });
+   });
 }
