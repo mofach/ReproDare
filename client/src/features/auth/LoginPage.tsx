@@ -52,8 +52,10 @@ export default function LoginPage() {
 
     } catch (err: any) {
       console.error("Login Error:", err);
-      // Menampilkan pesan error yang lebih spesifik jika ada
-      const message = err.response?.data?.message || err.message || 'Gagal login. Periksa email dan password.';
+      
+      // FIX: Ambil pesan error spesifik dari backend
+      const message = err.response?.data?.error || err.response?.data?.message || 'Gagal login. Periksa email dan password.';
+      
       setError(message);
     } finally {
       setIsLoading(false);

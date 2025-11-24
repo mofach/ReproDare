@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/api/axios';
 import { Loader2, Users, Crown, LogOut, Copy, Wifi, WifiOff } from 'lucide-react';
+import { useAudio } from '@/hooks/useAudio';
 
-// --- Tipe Data ---
 interface Participant {
   id: number;
   userId: number;
@@ -16,7 +16,7 @@ interface Participant {
   user: {
     id: number;
     name: string;
-    role: string; // Tambahkan role untuk filtering
+    role: string;
   }
 }
 
@@ -31,6 +31,7 @@ interface SessionDetail {
 export default function LobbyPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  
   const { socket, isConnected } = useSocket();
   const { user } = useAuthStore();
   
@@ -38,7 +39,14 @@ export default function LobbyPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Fetch Data Awal
+  const lobbyMusic = useAudio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'); 
+
+  useEffect(() => {
+    lobbyMusic.play();
+    return () => lobbyMusic.stop();
+  }, []);
+
+  // --- 1. FETCH DATA AWAL ---
   useEffect(() => {
     const fetchSession = async () => {
       try {
@@ -49,6 +57,13 @@ export default function LobbyPage() {
         if (data.participants) {
           setParticipants(data.participants);
         }
+
+        // FAILSAFE 1: Jika pas masuk status sudah running, langsung lempar ke game
+        if (data.status === 'running') {
+            console.log("[LOBBY] Sesi sudah berjalan, redirecting...");
+            navigate(`/game/play/${sessionId}`);
+        }
+
       } catch (error) {
         console.error("Gagal load sesi", error);
         alert("Sesi tidak ditemukan atau sudah berakhir.");
@@ -60,19 +75,31 @@ export default function LobbyPage() {
     fetchSession();
   }, [sessionId, navigate]);
 
-  // 2. Socket Logic
+  // --- 2. SOCKET LOGIC ---
   useEffect(() => {
     if (!socket || !sessionId) return;
 
     socket.emit('join_lobby', { sessionId });
 
+    // Listener: Update Data Lobby
     const handleLobbyUpdate = (data: any) => {
+      // Update list peserta
       if (data && data.participants) {
         setParticipants(data.participants);
       }
+
+      // FAILSAFE 2: Cek status dari update lobby. 
+      // Jika backend bilang status berubah jadi 'running', siswa otomatis pindah.
+      // Ini mengatasi masalah jika event 'game_started' terlewat.
+      if (data && data.status === 'running') {
+          console.log("[LOBBY] Status update: RUNNING. Moving to Arena...");
+          navigate(`/game/play/${sessionId}`);
+      }
     };
 
+    // Listener: Event Start Eksplisit
     const handleGameStart = () => {
+      console.log("[LOBBY] Game Start Event received!");
       navigate(`/game/play/${sessionId}`);
     };
 
@@ -85,12 +112,9 @@ export default function LobbyPage() {
     };
   }, [socket, sessionId, navigate]);
 
-  // 3. Action Guru
+  // --- ACTIONS ---
   const handleStartGame = () => {
-    if (!socket || !isConnected) {
-      alert("Koneksi terputus. Tunggu indikator berubah hijau.");
-      return;
-    }
+    if (!socket || !isConnected) return alert("Koneksi terputus.");
     socket.emit('start_game', { sessionId });
   };
 
@@ -101,11 +125,13 @@ export default function LobbyPage() {
     }
   };
 
-  // --- LOGIC FILTER GURU ---
-  // Hanya tampilkan user dengan role 'student' sebagai peserta
+  // --- FILTERING ---
   const studentParticipants = participants.filter(p => p.user.role === 'student');
+  
+  // Hitung yang online BENERAN
   const onlineCount = studentParticipants.filter(p => p.is_present).length;
 
+  // --- RENDER ---
   if (isLoading || !session) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50 flex-col gap-4">
@@ -157,7 +183,6 @@ export default function LobbyPage() {
                 Daftar Siswa
               </h2>
               <p className="text-muted-foreground mt-1">
-                {/* Gunakan studentParticipants.length agar guru tidak dihitung */}
                 Total: {studentParticipants.length} Siswa ({onlineCount} Online)
               </p>
             </div>
@@ -170,7 +195,7 @@ export default function LobbyPage() {
             )}
           </div>
 
-          {/* GRID PESERTA (Hanya Student) */}
+          {/* GRID PESERTA */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8 min-h-[200px]">
              {studentParticipants.map((p) => (
                <div 
@@ -186,11 +211,9 @@ export default function LobbyPage() {
                  }`}>
                    {p.user.name.charAt(0).toUpperCase()}
                  </div>
-                 
                  <span className="text-sm font-semibold text-center truncate w-full px-2 text-slate-700">
                    {p.user.name}
                  </span>
-                 
                  <div className={`mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
                    p.is_present ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'
                  }`}>
@@ -222,12 +245,13 @@ export default function LobbyPage() {
               <Button 
                 size="lg" 
                 className={`w-full md:w-auto px-10 text-lg font-bold shadow-xl shadow-primary/20 transition-all ${
-                  studentParticipants.length > 0 
+                  onlineCount > 0 
                     ? 'hover:scale-105 hover:shadow-primary/40' 
                     : 'opacity-50 cursor-not-allowed'
                 }`}
                 onClick={handleStartGame}
-                disabled={studentParticipants.length === 0}
+                // FIX 3: Disable jika tidak ada siswa ONLINE (bukan cuma terdaftar)
+                disabled={onlineCount === 0}
               >
                 <Crown className="mr-2 h-5 w-5" />
                 Mulai Permainan

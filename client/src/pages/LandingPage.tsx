@@ -53,7 +53,7 @@ export default function LandingPage() {
           </h1>
           <p className="text-lg md:text-xl text-slate-600 mb-10 leading-relaxed max-w-2xl mx-auto">
             Aplikasi edukatif berbasis gamifikasi <strong>"Truth or Dare"</strong> yang dirancang khusus untuk remaja. 
-            [cite_start]Diskusikan isu sensitif di ruang aman bersama Guru BK. [cite: 29, 30]
+            Diskusikan isu sensitif di ruang aman bersama Guru BK.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to="/register">
@@ -82,7 +82,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-2xl font-bold mb-3 text-slate-800">Ruang Aman (Safe Space)</h3>
               <p className="text-slate-600 leading-relaxed">
-                Wadah diskusi privat antara siswa dan guru BK tanpa takut dihakimi. [cite_start]Privasi terjaga untuk membahas hal sensitif. [cite: 30]
+                Wadah diskusi privat antara siswa dan guru BK tanpa takut dihakimi. Privasi terjaga untuk membahas hal sensitif.
               </p>
             </div>
 
@@ -93,7 +93,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-2xl font-bold mb-3 text-slate-800">Edukasi Interaktif</h3>
               <p className="text-slate-600 leading-relaxed">
-                [cite_start]Materi kesehatan reproduksi dikemas dalam permainan kartu Truth or Dare yang seru, tidak membosankan seperti ceramah biasa. [cite: 29]
+                Materi kesehatan reproduksi dikemas dalam permainan kartu Truth or Dare yang seru, tidak membosankan seperti ceramah biasa.
               </p>
             </div>
 
@@ -104,7 +104,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-2xl font-bold mb-3 text-slate-800">Refleksi & Feedback</h3>
               <p className="text-slate-600 leading-relaxed">
-                [cite_start]Guru memberikan umpan balik langsung (feedback) dan penilaian terhadap pemahaman siswa secara realtime. [cite: 30]
+                Guru memberikan umpan balik langsung (feedback) dan penilaian terhadap pemahaman siswa secara realtime.
               </p>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function LandingPage() {
              <span className="font-bold text-white text-lg">ReproDare</span>
           </div>
           <p className="text-sm">
-            © 2025 Tim PKM-K ReproDare. [cite_start]Inovasi untuk Kesehatan Remaja Indonesia. [cite: 31]
+            © 2025 Tim PKM-K ReproDare. Inovasi untuk Kesehatan Remaja Indonesia.
           </p>
         </div>
       </footer>
